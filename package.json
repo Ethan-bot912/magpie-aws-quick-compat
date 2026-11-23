@@ -1,0 +1,49 @@
+{
+  "name": "magpie-aws-quick-compat",
+  "version": "0.1.5-local.2",
+  "description": "Amazon Quick provider for magpie and OpenCode with Claude Code tool-call compatibility",
+  "type": "module",
+  "main": "./index.mjs",
+  "files": [
+    "index.mjs",
+    "lib",
+    "bin",
+    "README.md",
+    "README.zh-CN.md",
+    "PROTOCOL.md",
+    "PROTOCOL.zh-CN.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "magpie",
+    "amazon-quick",
+    "aws-quick",
+    "aws"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ethan-bot912/magpie-aws-quick-compat.git"
+  },
+  "homepage": "https://github.com/Ethan-bot912/magpie-aws-quick-compat#readme",
+  "bugs": {
+    "url": "https://github.com/Ethan-bot912/magpie-aws-quick-compat/issues"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "magpie": {
+    "name": "Amazon Quick",
+    "maxConcurrency": 2,
+    "icon": "https://aws.amazon.com/favicon.ico",
+    "summary": {
+      "en": "Your own Amazon Quick account as a provider.",
+      "zh": "用你自己的 Amazon Quick 账号作为模型提供方。"
+    }
+  }
+}
