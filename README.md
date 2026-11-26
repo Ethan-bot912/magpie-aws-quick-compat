@@ -191,6 +191,9 @@ widget, which also assumes the allowance resets on the 1st of next month.
 
 A few plugin options tune request handling (`magpie plugin options aws-quick '{…}'`):
 
+- `webSearchWithClientTools` (default `false`): let Quick search public web
+  pages while the client keeps its own tools. Requests that require a client
+  tool still disable Quick web search.
 - `headerWaitMs` (default `10000`): streaming requests return response headers
   after Quick's first output **or** this long, whichever comes first — Quick
   can sit silent while its own tools run, and gateways cap how long they wait
@@ -233,8 +236,9 @@ A few plugin options tune request handling (`magpie plugin options aws-quick '{�
   workspace — the same place the Quick app puts them. Remote URLs and
   non-image files (`file`/`input_file` parts) are still unsupported; a
   failed upload falls back to a note telling the model the image is
-  missing. Cloud upload needs a direct session (OAuth / Credential Manager
-  sign-in); the local-outpost fallback stays inline-only.
+  missing. Cloud upload is on for direct sessions (OAuth / Credential Manager).
+  Set the plugin option `uploadLargeImagesWithOutpost: true` to enable it for
+  local-outpost sessions too.
 - **Sampling params**: `temperature` etc. don't exist in the protocol and are
   ignored server-side (`capabilities.temperature:false`).
 - **Sessions are account-bound**: the thread-reuse scope includes an account

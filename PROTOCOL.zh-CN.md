@@ -201,7 +201,7 @@ Quick 自有 agent 工具的服务端执行过程，`message_complete.tool_calls
 
 1. 把 OpenAI `tools[]` + `tool_choice` 渲染成一段 `[Tool-use convention]` 指令，
    拼进 `user_message.payload.text`（协议没有 system-prompt 通道，只能走正文）。
-   同时置 `web_search_enabled:false`，减少模型调用自带联网工具"抢答"。
+   默认同时置 `web_search_enabled:false`，减少模型调用自带联网工具"抢答"。
 2. 模型把调用输出为纯文本 `<tool_call>{"name":…,"arguments":{…}}</tool_call>`
    （tag 可能跨 `text_delta` 切分，插件做了 holdback 解析，见 `lib/tools.mjs`）。
 3. 解析结果映射为 OpenAI `tool_calls`；`finish_reason:"tool_calls"`。

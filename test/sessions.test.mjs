@@ -114,12 +114,15 @@ test('store persists to disk and a fresh instance resumes entries', async () => 
   try {
     const s1 = createSessionStore({ file, ttlMs: 60_000 })
     s1.set('k1', { threadId: 'thread-abc' })
-    s1.set('k2', { threadId: 'thread-def' })
+    s1.set('k2', { threadId: 'thread-def', toolSpecs: { Read: 'schema-digest' }, callIds: ['call-id'] })
     // persist is debounced — wait for the write
     await new Promise((r) => setTimeout(r, 400))
     const s2 = createSessionStore({ file, ttlMs: 60_000 })
     assert.equal(s2.take('k1')?.threadId, 'thread-abc')
-    assert.equal(s2.take('k2')?.threadId, 'thread-def')
+    const next = s2.take('k2')
+    assert.equal(next?.threadId, 'thread-def')
+    assert.deepEqual(next?.toolSpecs, { Read: 'schema-digest' })
+    assert.deepEqual(next?.callIds, ['call-id'])
     assert.equal(s2.size, 0) // take() claims are persisted too
     await new Promise((r) => setTimeout(r, 400))
     const s3 = createSessionStore({ file, ttlMs: 60_000 })

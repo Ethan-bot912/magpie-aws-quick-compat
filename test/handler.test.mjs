@@ -766,6 +766,37 @@ test('non-direct outpost keeps large images inline-only (no upload calls)', asyn
   }
 })
 
+test('opted-in outpost uploads oversized Read results and keeps small images inline', async () => {
+  const quick = await startFakeQuick({})
+  const calls = []
+  const messages = [
+    { role: 'system', content: 'x'.repeat(27_838) },
+    { role: 'user', content: 'Describe the pictures from the local tool' },
+    { role: 'assistant', tool_calls: [{ id: 'read-image', type: 'function', function: { name: 'Read', arguments: '{}' } }] },
+    { role: 'tool', name: 'Read', tool_call_id: 'read-image', content: [bigImageMsg(512).content[1], bigImageMsg(39_352).content[1]] },
+  ]
+  try {
+    const response = await handleChatCompletions({
+      body: { model: 'smart', messages },
+      outpostMgr: fakeMgr(quick),
+      options: { uploadLargeImagesWithOutpost: true, fetchImpl: uploadFetch(calls) },
+    })
+    assert.equal(response.status, 200)
+    await response.json()
+    const payload = quick.state.userMessages.at(-1).payload
+    const [small, large] = payload.attachments
+    assert.equal(small.size, 512)
+    assert.ok(small.data)
+    assert.equal(large.size, 39_352)
+    assert.equal(large.data, undefined)
+    assert.equal(large.path, '/data/x/attached_files/image-1.png')
+    assert.ok(!payload.text.includes('not delivered'))
+    assert.equal(calls.length, 3)
+  } finally {
+    await quick.close()
+  }
+})
+
 test('usage across agentic steps reports the latest prompt, not the sum', async () => {
   const f = await startFakeQuick({
     script: () => [
@@ -863,6 +894,34 @@ test('tool_start surfaces as [Quick: name] reasoning; showQuickTools:false hides
     assert.ok(!j2.choices[0].message.reasoning_content?.includes('[Quick:'), 'showQuickTools:false must hide tool notes')
   } finally {
     await f.close()
+  }
+})
+
+test('Quick web search can run alongside client tools unless a client tool is required', async () => {
+  const quick = await startFakeQuick({
+    script: (payload) => [
+      ...(payload.web_search_enabled ? [{ type: 'tool_start', payload: { tool_name: 'web_search' } }] : []),
+      { type: 'message_complete', payload: { text: '<tool_call>{"name":"read_note","arguments":{}}</tool_call>' } },
+    ],
+  })
+  try {
+    const manager = fakeMgr(quick)
+    const tools = [{ type: 'function', function: { name: 'read_note', parameters: { type: 'object' } } }]
+    for (const { options, choice, enabled } of [
+      { options: {}, choice: 'auto', enabled: false },
+      { options: { webSearchWithClientTools: true }, choice: 'auto', enabled: true },
+      { options: { webSearchWithClientTools: true }, choice: { type: 'function', function: { name: 'read_note' } }, enabled: false },
+    ]) {
+      const body = { model: 'smart', messages: [{ role: 'user', content: 'Find a source and read the note' }], tools, tool_choice: choice }
+      const response = await handleChatCompletions({ body, outpostMgr: manager, options })
+      assert.equal(response.status, 200)
+      assert.equal(quick.state.userMessages.at(-1).payload.web_search_enabled, enabled)
+      const { choices: [{ message }] } = await response.json()
+      assert.equal((message.reasoning_content ?? '').includes('[Quick: web_search]'), enabled)
+      assert.deepEqual(message.tool_calls.map(call => call.function.name), ['read_note'])
+    }
+  } finally {
+    await quick.close()
   }
 })
 
@@ -1094,6 +1153,72 @@ test('a disconnect with buffered tool output does not replay a reused turn', asy
     assert.ok(final.every((event) => !event.choices?.some((choice) => choice.delta?.tool_calls || choice.finish_reason)))
     assert.equal(attempts, 2)
     assert.equal(fake.state.userMessages[0].threadId, fake.state.userMessages[1].threadId)
+  } finally {
+    await fake.close()
+  }
+})
+
+test('a cancelled continuation leaves the original thread available', async () => {
+  let calls = 0
+  const fake = await startFakeQuick({ script: (payload) => ++calls === 2 ? [] : defaultScript(payload) })
+  const sessions = createSessionStore()
+  const outpostMgr = fakeMgr(fake)
+  const options = { identity: 'cancel-reuse-test' }
+  const first = { role: 'user', content: 'remember teal' }
+  try {
+    const initial = await handleChatCompletions({
+      body: { model: 'fast', messages: [first] }, outpostMgr, sessions, options,
+    })
+    const messages = [first, (await initial.json()).choices[0].message, { role: 'user', content: 'which color?' }]
+    const body = { model: 'fast', messages }
+    const controller = new AbortController()
+    const cancelled = handleChatCompletions({ body, outpostMgr, sessions, options, signal: controller.signal })
+    await sleep(200)
+    controller.abort()
+    assert.equal((await cancelled).status, 499)
+    const resumed = await handleChatCompletions({ body, outpostMgr, sessions, options })
+    assert.equal(resumed.status, 200)
+    await resumed.json()
+    const [before, interrupted, after] = fake.state.userMessages
+    assert.equal(before.threadId, interrupted.threadId)
+    assert.equal(before.threadId, after.threadId)
+    assert.equal(after.payload.text, 'which color?')
+  } finally {
+    await fake.close()
+  }
+})
+
+test('a newly loaded tool and changed effort keep the thread and only add the new definition', async () => {
+  const fake = await startFakeQuick()
+  const sessions = createSessionStore()
+  const mgr = fakeMgr(fake)
+  const read = fnTool('Read')
+  const lookup = lookupTool()
+  const options = { identity: 'dynamic-tool-test', sessionKey: 'dynamic-tool-session' }
+  const rounds = [
+    { tools: [read], reasoning_effort: 'high' },
+    { tools: [read], reasoning_effort: 'medium' },
+    { tools: [read, lookup], reasoning_effort: 'medium' },
+    { tools: [read, lookup], reasoning_effort: 'high' },
+  ]
+  const messages = []
+  try {
+    for (const [index, round] of rounds.entries()) {
+      messages.push({ role: 'user', content: 'turn ' + (index + 1) })
+      const response = await handleChatCompletions({
+        body: { model: 'smart', messages, ...round }, outpostMgr: mgr, sessions, options,
+      })
+      assert.equal(response.status, 200)
+      messages.push((await response.json()).choices[0].message)
+    }
+    const [initial, continued, added, repeated] = fake.state.userMessages
+    assert.deepEqual(fake.state.userMessages.map(({ threadId }) => threadId), rounds.map(() => initial.threadId))
+    assert.equal(continued.payload.thinking_effort, 'medium')
+    assert.match(initial.payload.text, /- Read:/)
+    assert.doesNotMatch(continued.payload.text, /- Read:/)
+    assert.match(added.payload.text, /- Lookup:.*\n  parameters:/)
+    assert.doesNotMatch(added.payload.text, /- Read:/)
+    assert.doesNotMatch(repeated.payload.text, /- (Read|Lookup):/)
   } finally {
     await fake.close()
   }

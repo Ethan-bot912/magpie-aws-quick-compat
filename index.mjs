@@ -158,8 +158,8 @@ function makeSessions(opts) {
   const ttlMs = Number(opts.sessionTtlMs) > 0 ? Number(opts.sessionTtlMs) : SESSION_DEFAULTS.ttlMs
   const max = Number(opts.sessionMax) > 0 ? Math.floor(Number(opts.sessionMax)) : SESSION_DEFAULTS.max
   // Persist to disk: plugin hosts may re-instantiate per request/session, and
-  // an in-memory-only store would drop every cached thread each time. Only
-  // hashes + threadIds are written — never message content.
+  // an in-memory-only store would drop every cached thread each time. Cache
+  // entries hold IDs, anchors and tool fingerprints. Message content stays in memory.
   const dir = opts.sessionDir || defaultStoreDir()
   return createSessionStore({ ttlMs, max, file: path.join(dir, 'thread-sessions.json') })
 }
@@ -321,7 +321,7 @@ export const AwsQuickAuthPlugin = async (_input, options) => {
 
     auth: {
       provider: PROVIDER,
-      maxConcurrency: 1,
+      maxConcurrency: 8,
       methods: [
         oauthSignIn({
           label: '账号登录（浏览器 OAuth，无需桌面端）',

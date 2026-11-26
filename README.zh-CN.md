@@ -163,6 +163,8 @@ provider ID 是 `aws-quick`，给 Claude Code 选提供方时用这个 ID。
 
 少数插件选项可以调请求行为（`magpie plugin options aws-quick '{…}'`）：
 
+- `webSearchWithClientTools`（默认 `false`）：允许 Quick 搜索公开网页，
+  同时保留客户端工具。强制使用客户端工具的请求仍关闭 Quick 搜索。
 - `headerWaitMs`（默认 `10000`）：流式请求在 Quick 给出首个输出**或**超过
   该时长后返回响应头——Quick 跑自带工具时可能长时间静默，而网关对响应头
   的等待是有上限的。`0` 表示和以前一样等到首个输出。
@@ -193,8 +195,8 @@ provider ID 是 `aws-quick`，给 Claude Code 选提供方时用这个 ID。
   内联数据）会通过 Quick 自己的附件上传流程传到账号的云端会话工作区——
   和 Quick 应用里附加文件是同一个位置。远程 URL 和非图片文件
   （`file`/`input_file`）仍不支持；上传失败时会在消息里注明图片缺失。
-  云端上传需要直连会话（OAuth / 凭据管理器登录）；本地 outpost 回退路径
-  仍只支持内联。
+  直连会话（OAuth / 凭据管理器登录）默认开启云端上传；本地 outpost 会话可通过
+  插件选项 `uploadLargeImagesWithOutpost: true` 开启。
 - **采样参数**：`temperature` 等不在协议内，传了也会被服务端忽略（`capabilities.temperature:false`）。
 - **会话与账号绑定**：thread 复用的 scope 里包含账号身份哈希；换号后旧 thread 自动失效重建。
 - **多窗口/并发**：同一 QuickSocket 上不同 thread 可并行 turn；同一 thread 的并发请求会被拒绝（`busy`）。
