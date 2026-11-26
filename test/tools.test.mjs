@@ -80,6 +80,67 @@ test('preamble falls back to name+description when toolset is enormous', () => {
   assert.ok(!p.includes('"properties"'))
 })
 
+test('compact preambles retain file delivery and tool search parameter schemas', () => {
+  const tools = normalizeTools([
+    {
+      name: 'SendUserFile',
+      input_schema: {
+        type: 'object',
+        properties: {
+          files: { type: 'array', items: { type: 'string' } },
+          status: { type: 'string', enum: ['normal', 'proactive'] },
+          display: { type: 'string', enum: ['render', 'attach'] },
+        },
+        required: ['files', 'status'],
+      },
+    },
+    {
+      name: 'ToolSearch',
+      input_schema: {
+        type: 'object',
+        properties: { query: { type: 'string' }, max_results: { type: 'number' } },
+        required: ['query', 'max_results'],
+      },
+    },
+    ...Array.from({ length: 36 }, (_, index) => ({
+      name: `tool_${index}`,
+      input_schema: {
+        type: 'object',
+        properties: Object.fromEntries(Array.from({ length: 45 }, (_, field) => [`generic_field_${field}`, { type: 'string' }])),
+      },
+    })),
+  ])
+
+  const automatic = buildToolPreamble(tools, 'auto')
+  assert.ok(automatic.includes('parameter schemas omitted'))
+  for (const preamble of [
+    automatic,
+    buildToolPreamble(tools, 'auto', { lite: true }),
+    buildToolPreamble(tools, 'auto', { namesOnly: true }),
+    buildToolPreamble(tools, 'auto', { reminder: true }),
+  ]) {
+    const schemaFor = (name) => {
+      const prefix = `- ${name} parameters: `
+      const line = preamble.split('\n').find(line => line.startsWith(prefix))
+      assert.ok(line, `Expected compact parameters for ${name}`)
+      return JSON.parse(line.slice(prefix.length))
+    }
+    const delivery = schemaFor('SendUserFile')
+    assert.deepEqual(delivery.required, ['files', 'status'])
+    assert.deepEqual(delivery.properties.files, { type: 'array', items: { type: 'string' } })
+    assert.deepEqual(delivery.properties.status.enum, ['normal', 'proactive'])
+    assert.deepEqual(delivery.properties.display.enum, ['render', 'attach'])
+    const search = schemaFor('ToolSearch')
+    assert.deepEqual(search.required, ['query', 'max_results'])
+    assert.equal(search.properties.max_results.type, 'number')
+    assert.ok(!preamble.includes('generic_field_0'))
+  }
+
+  const forced = buildToolPreamble(tools, { type: 'tool', name: 'ToolSearch' }, { reminder: true })
+  assert.ok(forced.includes('- ToolSearch parameters: '))
+  assert.ok(!forced.includes('SendUserFile'))
+})
+
 test('parser extracts blocks split across deltas', () => {
   const p = createToolCallParser()
   let r = p.push('Hello <tool_call>{"name":"get_weather","arg')
