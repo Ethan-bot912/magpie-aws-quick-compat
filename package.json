@@ -1,6 +1,6 @@
 {
   "name": "magpie-aws-quick-compat",
-  "version": "0.1.5-local.4",
+  "version": "0.1.5-local.5",
   "description": "Amazon Quick provider for magpie and OpenCode with Claude Code tool-call compatibility",
   "type": "module",
   "main": "./index.mjs",

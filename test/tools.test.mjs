@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { normalizeTools, buildToolPreamble, createToolCallParser, slimSchema } from '../lib/tools.mjs'
+import { normalizeTools, buildToolPreamble, buildToolInstructions, createToolCallParser, slimSchema } from '../lib/tools.mjs'
 import { byteLen } from '../lib/translate.mjs'
 
 test('normalizeTools keeps only named function tools', () => {
@@ -15,15 +15,15 @@ test('normalizeTools keeps only named function tools', () => {
   assert.equal(tools[1].parameters.type, 'object') // defaulted
 })
 
-test('buildToolPreamble embeds specs and forced choice', () => {
+test('the catalog preserves specs and the instructions preserve forced choice', () => {
   const tools = normalizeTools([{ type: 'function', function: { name: 'f', description: 'd', parameters: { type: 'object', properties: { x: { type: 'string' } } } } }])
   const p = buildToolPreamble(tools, 'required')
-  assert.ok(p.includes('<tool_call>{"name":"<tool_name>"'))
   assert.ok(p.includes('- f: d'))
-  assert.ok(p.includes('reply with <tool_call> block(s) only'))
+  assert.ok(buildToolInstructions(true, true).includes('requires a client tool call'))
   assert.equal(buildToolPreamble([], 'auto'), '')
   const named = buildToolPreamble(tools, { type: 'function', function: { name: 'f' } })
-  assert.ok(named.includes('requires the client tool "f"'))
+  assert.ok(named.includes('- f: d'))
+  assert.ok(buildToolInstructions('f', false).includes('requires the client tool "f"'))
 })
 
 test('slimSchema strips annotation keywords, keeps structure', () => {
@@ -181,6 +181,18 @@ test('parser holds back split close tag', () => {
   const r = p.push('call>tail')
   assert.equal(r.text, 'tail')
   assert.equal(r.calls.length, 1)
+})
+
+test('parser preserves backticked mentions and examples across deltas', () => {
+  const call = '<tool_call>{"name":"f","arguments":{}}</tool_call>'
+  const prose = 'Mention `<tool_call>` here.\n```xml\n' + call + '\n```\n'
+  const parser = createToolCallParser()
+  let visible = ''
+  for (const char of prose + call) visible += parser.push(char).text
+  const tail = parser.end()
+  assert.equal(visible + tail.text, prose)
+  assert.equal(tail.dropped, undefined)
+  assert.deepEqual(parser.calls, [{ name: 'f', arguments: {} }])
 })
 
 test('parser drops unterminated block without leaking it', () => {

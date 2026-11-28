@@ -199,8 +199,8 @@ Quick 自有 agent 工具的服务端执行过程，`message_complete.tool_calls
 
 可行的桥接（插件采用，已实测跑通）：
 
-1. 把 OpenAI `tools[]` + `tool_choice` 渲染成一段 `[Tool-use convention]` 指令，
-   拼进 `user_message.payload.text`（协议没有 system-prompt 通道，只能走正文）。
+1. 把 OpenAI `tools[]` 的工具清单放进 `user_message.payload.text`，调用格式和
+   `tool_choice` 放进 `custom_prompt`。
    默认同时置 `web_search_enabled:false`，减少模型调用自带联网工具"抢答"。
 2. 模型把调用输出为纯文本 `<tool_call>{"name":…,"arguments":{…}}</tool_call>`
    （tag 可能跨 `text_delta` 切分，插件做了 holdback 解析，见 `lib/tools.mjs`）。

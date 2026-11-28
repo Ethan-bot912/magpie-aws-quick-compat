@@ -208,9 +208,8 @@ serves its own tool loop — an external `user_message` cannot inject a
 
 The workable bridge (adopted by the plugin, verified end-to-end):
 
-1. Render OpenAI `tools[]` + `tool_choice` into a `[Tool-use convention]`
-   instruction block appended to `user_message.payload.text` (there is no
-   system-prompt channel, so it has to ride in the body). By default, set
+1. Send the OpenAI `tools[]` catalog in `user_message.payload.text` and put
+   the calling convention and `tool_choice` in `custom_prompt`. By default, set
    `web_search_enabled:false` to reduce the model "answering first" with its
    own web-search tool.
 2. The model emits calls as plain text

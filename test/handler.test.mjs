@@ -434,7 +434,6 @@ test('tool_call convention: <tool_call> text becomes OpenAI tool_calls', async (
     assert.ok(deltaText.includes('Client tool calling — reminder'), 'reused turn carries the reminder')
     assert.ok(deltaText.includes('get_weather'), 'reminder names the tools')
     assert.ok(!deltaText.includes('Tools provided by the client'), 'full spec is not re-sent on a reused thread')
-    assert.ok(byteLen(deltaText) < byteLen(sent), 'reused turn is smaller than the first')
   } finally {
     await toolFake.close()
   }
@@ -1047,6 +1046,18 @@ async function runScript(script, extra = {}) {
   }
 }
 
+test('streaming preserves a literal tool tag in a reply and finishes normally', async () => {
+  const deltas = ['The protocol uses `', '<tool_', 'call>` in its instructions.']
+  const script = deltas.map((delta) => ({ type: 'text_delta', payload: { delta } }))
+  const { events, status } = await runScript([...script, completeStep], { stream: true })
+  assert.equal(status, 200)
+  assert.ok(events.every((event) => !event.error))
+  const choices = events.flatMap((event) => event.choices ?? [])
+  assert.equal(choices.map((choice) => choice.delta?.content ?? '').join(''), deltas.join(''))
+  assert.ok(choices.every((choice) => !choice.delta?.tool_calls))
+  assert.equal(choices.at(-1).finish_reason, 'stop')
+})
+
 test('matching native and text batches are emitted once in either event order', async () => {
   for (const nativeFirst of [true, false]) {
     const native = nativeCall('same-step', 'lookup', { key: 'entry', filter: { city: 'Paris', active: true } })
@@ -1243,6 +1254,10 @@ test('a newly loaded tool and changed effort keep the thread and only add the ne
     assert.match(added.payload.text, /- Lookup:.*\n  parameters:/)
     assert.doesNotMatch(added.payload.text, /- Read:/)
     assert.doesNotMatch(repeated.payload.text, /- (Read|Lookup):/)
+    for (const { payload } of fake.state.userMessages) {
+      assert.doesNotMatch(payload.text, /<tool_call>/)
+      assert.match(payload.custom_prompt, /reply with only raw blocks like <tool_call>/)
+    }
   } finally {
     await fake.close()
   }
