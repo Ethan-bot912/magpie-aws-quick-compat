@@ -558,6 +558,30 @@ test('tool_choice none suppresses preamble', async () => {
   }
 })
 
+test('streaming ignores the Quick unknown-message status and keeps other notices', async () => {
+  const f = await startFakeQuick({
+    script: () => [
+      { type: 'text_delta', payload: { delta: 'answer' } },
+      { type: 'status', payload: { status: 'unknown_message_type' } },
+      { type: 'status', payload: { message: 'another_status' } },
+      { type: 'message_complete', payload: {} },
+    ],
+  })
+  try {
+    const res = await handleChatCompletions({
+      body: { model: 'fast', stream: true, messages: [{ role: 'user', content: 'hi' }] },
+      outpostMgr: fakeMgr(f),
+    })
+    assert.equal(res.status, 200)
+    const events = await readSse(res)
+    const text = events.map((e) => e.choices?.[0]?.delta?.content ?? '').join('')
+    assert.equal(text, 'answer\n\n> [quick] another_status')
+    assert.equal(events.at(-1).done, true)
+  } finally {
+    await f.close()
+  }
+})
+
 test('mid-stream error emits an error chunk then DONE', async () => {
   const errFake = await startFakeQuick({
     script: () => [
